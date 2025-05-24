@@ -10,25 +10,33 @@
 // PRE:
 // POST:
 static void moveToTarget(
-    float pos, 
-    float targetPos, 
-    sf::RenderWindow& window, 
-    sf::RectangleShape& evilRectangle, 
-    float speed
+    float pos,
+    float targetPos,
+    sf::RenderWindow& window,
+    sf::RectangleShape& evilRectangle,
+    float speed,
+    bool& isComplete
 ) {
-    if (pos <= targetPos) {
-        float bottomLimit = window.getSize().y - evilRectangle.getSize().y;
-        if (evilRectangle.getPosition().y < bottomLimit) {
-            evilRectangle.move({ 0, speed });
-        }
+    const float threshold = std::max(1.0f, speed * 1.5f);
+    float bottomLimit = window.getSize().y - evilRectangle.getSize().y;
+
+    float currentY = evilRectangle.getPosition().y;
+
+    if (std::abs(currentY - targetPos) > threshold) {
+        float direction = (targetPos > currentY) ? 1.f : -1.f;
+        float delta = std::min(speed, std::abs(targetPos - currentY));
+        float nextY = currentY + direction * delta;
+
+        // Clamp to window
+        nextY = std::clamp(nextY, 0.f, bottomLimit);
+        evilRectangle.setPosition({ evilRectangle.getPosition().x, nextY });
     }
     else {
-        float pos = evilRectangle.getPosition().y;
-        if (pos > 0) {
-            evilRectangle.move({ 0, -speed });
-        }
+        evilRectangle.setPosition({ evilRectangle.getPosition().x, targetPos });
+        isComplete = true;
     }
 }
+
 
 // PRE:
 // POST:
@@ -51,15 +59,15 @@ static void moveToTargetRandom(
 
     float newY = evilRectangle.getPosition().y;
 
-    if (newY < targetY) {
-        if (newY + speed <= bottomLimit) {
-            evilRectangle.move({ 0, speed });
-        }
-    }
-    else if (newY > targetY) {
-        if (newY - speed >= 0.0f) {
-            evilRectangle.move({ 0, -speed });
-        }
+    if (std::abs(newY - targetY) > epsilon) {
+        float direction = (targetY > newY) ? 1.f : -1.f;
+        float distance = std::abs(targetY - newY);
+        float delta = std::min(speed, distance);
+        float nextY = newY + direction * delta;
+
+        // Clamp to screen limits
+        nextY = std::max(0.f, std::min(nextY, bottomLimit));
+        evilRectangle.setPosition({ evilRectangle.getPosition().x, nextY });
     }
 
     newY = evilRectangle.getPosition().y;
@@ -121,7 +129,6 @@ static void executeRandomMovement(
         float targetY = movementPattern.back();
 
         if (!isComplete) {
-            speed = 0.08f;
             moveToTargetRandom(currentY, targetY, window, evilRectangle, speed, isComplete);
         }
         else {
@@ -225,38 +232,39 @@ static void increaseBallSpeed(
     sf::Vector2f& upLeft, 
     sf::Vector2f& upRight,
     sf::Vector2f& downLeft, 
-    sf::Vector2f& downRight
+    sf::Vector2f& downRight,
+    float dt
 ) {
-    masterSpeed += float((1.0 / 900.0) * pow(masterSpeed, 3.0));
+    masterSpeed += float((1.0 / 900000000.0) * pow(masterSpeed, 3.0));
     
-    if (masterSpeed > 200.0f) masterSpeed = 200.0f;
+    //if (masterSpeed > 200.0f) masterSpeed = 200.0f;
 
     if (current == upLeft) {
-        upLeft = { -masterSpeed, -masterSpeed };
-        upRight = { masterSpeed, -masterSpeed };
-        downLeft = { -masterSpeed, masterSpeed };
-        downRight = { masterSpeed, masterSpeed };
+        upLeft = { -masterSpeed * dt, -masterSpeed * dt };
+        upRight = { masterSpeed * dt, -masterSpeed * dt };
+        downLeft = { -masterSpeed * dt, masterSpeed * dt };
+        downRight = { masterSpeed * dt, masterSpeed * dt };
         current = upLeft;
     }
     else if (current == upRight) {
-        upLeft = { -masterSpeed, -masterSpeed };
-        upRight = { masterSpeed, -masterSpeed };
-        downLeft = { -masterSpeed, masterSpeed };
-        downRight = { masterSpeed, masterSpeed };
+        upLeft = { -masterSpeed * dt, -masterSpeed * dt };
+        upRight = { masterSpeed * dt, -masterSpeed * dt };
+        downLeft = { -masterSpeed * dt, masterSpeed * dt };
+        downRight = { masterSpeed * dt, masterSpeed * dt };
         current = upRight;
     }
     else if (current == downLeft) {
-        upLeft = { -masterSpeed, -masterSpeed };
-        upRight = { masterSpeed, -masterSpeed };
-        downLeft = { -masterSpeed, masterSpeed };
-        downRight = { masterSpeed, masterSpeed };
+        upLeft = { -masterSpeed * dt, -masterSpeed * dt };
+        upRight = { masterSpeed * dt, -masterSpeed * dt };
+        downLeft = { -masterSpeed * dt, masterSpeed * dt };
+        downRight = { masterSpeed * dt, masterSpeed * dt };
         current = downLeft;
     }
     else {
-        upLeft = { -masterSpeed, -masterSpeed };
-        upRight = { masterSpeed, -masterSpeed };
-        downLeft = { -masterSpeed, masterSpeed };
-        downRight = { masterSpeed, masterSpeed };
+        upLeft = { -masterSpeed * dt, -masterSpeed * dt };
+        upRight = { masterSpeed * dt, -masterSpeed * dt };
+        downLeft = { -masterSpeed * dt, masterSpeed * dt };
+        downRight = { masterSpeed * dt, masterSpeed * dt };
         current = downRight;
     }
 }
@@ -269,8 +277,6 @@ static void decreaseRandomnessFactor(
     std::vector<float>& movementPattern,
     bool& randomMovement
 ) {
-    // Each frame decide if a random movement should be executed 1/5000 chance
-    randInt += int((static_cast<double>(1) / 900) * pow(randInt, 3));
     int randNum = std::rand() % randInt;
 
     if (randNum == 0 && randomMovement == false) {
@@ -283,13 +289,15 @@ static void decreaseRandomnessFactor(
 static void detectUpwardMovement(
     sf::RectangleShape& rectangle, 
     bool& isMoving, 
-    float speed
+    float speed,
+    float dt
 ) {
+    //std::cout << "dt: " << dt << "\n";
     if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Up)) {
         sf::Vector2f pos = rectangle.getPosition();
         if (pos.y > 0) {
             isMoving = true;
-            rectangle.move({ 0, -speed });
+            rectangle.move({ 0, -speed * dt });
         }
     }
 }
@@ -300,13 +308,14 @@ static void detectDownwardMovement(
     sf::RenderWindow& window,
     sf::RectangleShape& rectangle,
     bool& isMoving,
-    float speed
+    float speed,
+    float dt
 ) {
     if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Down)) {
         float bottomLimit = window.getSize().y - rectangle.getSize().y;
         if (rectangle.getPosition().y < bottomLimit) {
             isMoving = true;
-            rectangle.move({ 0, speed });
+            rectangle.move({ 0, speed * dt });
         }
     }
 }
@@ -357,9 +366,11 @@ static void handleEvilRectangleMovement(
             executeRandomMovement(movementPattern, evilRectangle, isComplete, speed, window, randomMovement);
         }
         else {
-            float pos = evilRectangle.getPosition().y;
-            float targetPos = targetPosition.y - (evilRectangle.getSize().y / 2);
-            moveToTarget(pos, targetPos, window, evilRectangle, speed);
+            if (!isComplete) {
+                float pos = evilRectangle.getPosition().y;
+                float targetPos = targetPosition.y - (evilRectangle.getSize().y / 2);
+                moveToTarget(pos, targetPos, window, evilRectangle, speed, isComplete);
+            }
         }
     }
 
@@ -588,7 +599,7 @@ static void resetBall(
     ball.setPosition({ windowSize.x / 2.f, windowSize.y / 2.f });
 
     // reset ball speed
-    masterSpeed = .05f;
+    masterSpeed = 250.f;
 }
 
 static void resetTrajectories(
@@ -597,13 +608,14 @@ static void resetTrajectories(
     sf::Vector2f& upRight, 
     sf::Vector2f& downLeft, 
     sf::Vector2f& downRight, 
-    sf::Vector2f& current
+    sf::Vector2f& current,
+    float dt
 ) {
     // reset trajectories
-    upLeft = { -masterSpeed, -masterSpeed };
-    upRight = { masterSpeed, -masterSpeed };
-    downLeft = { -masterSpeed, masterSpeed };
-    downRight = { masterSpeed, masterSpeed };
+    upLeft = { -masterSpeed * dt, -masterSpeed * dt };
+    upRight = { masterSpeed * dt, -masterSpeed * dt };
+    downLeft = { -masterSpeed * dt, masterSpeed * dt };
+    downRight = { masterSpeed * dt, masterSpeed * dt };
 
     // pick new random starting trajectory
     std::random_device rd;
@@ -635,15 +647,19 @@ static void handleScore(
     sf::Vector2f& downLeft,
     sf::Vector2f& downRight,
     sf::Vector2f& current,
-    bool& goalScored
+    bool& goalScored,
+    float dt,
+    sf::Sound& goal
     ) {
 
     if (rightSideOfBall < leftSideOfScreen) {
+        goal.play();
         enemyScore += 1;
         goalScored = true;
     }
 
     if (leftSideOfBall > rightSideOfScreen) {
+        goal.play();
         userScore += 1;
         goalScored = true;
     }
@@ -657,7 +673,8 @@ static void handleScore(
             upRight,
             downLeft,
             downRight,
-            current
+            current,
+            dt
         );
     }
     else {
@@ -713,7 +730,7 @@ static void startCountdown(
 int main() {
     sf::RenderWindow window(sf::VideoMode({ 800, 600 }), "Ultimate pong");
 
-    //window.setFramerateLimit(2000);
+    window.setFramerateLimit(60);
 
     sf::Vector2u windowSize = window.getSize();
 
@@ -737,7 +754,7 @@ int main() {
     ball.setPosition({ windowSize.x / 2.f, windowSize.y / 2.f });
 
     // global ball speed
-    float masterSpeed = .05f;
+    float masterSpeed = 250.f; //250.f
 
     // initilize random starting trajectory
     sf::Vector2f upLeft = { -masterSpeed, -masterSpeed };
@@ -772,8 +789,8 @@ int main() {
     bool goalScored = false;
 
     // floats
-    float speed = .1f;
-    float swaySpeed = .1f;
+    float speed = 500.f;
+    float swaySpeed = 500.f;
     float swayRange = 480.0f;
     float originalY = evilRectangle.getPosition().y;
     float bottomOfBall = 0;
@@ -790,7 +807,7 @@ int main() {
     float bottomOfEvilRectangle = 0;
 
     // ints
-    int randInt = 5000;
+    int randInt = 75;
     int userScore = 0;
     int enemyScore = 0;
     int gameState = 0; // 1 for player vs player, 2 for player vs bot, 3 for player vs player
@@ -801,14 +818,17 @@ int main() {
     // Sound buffers
     sf::SoundBuffer boundaryHitBuffer;
     sf::SoundBuffer paddleHitBuffer;
+    sf::SoundBuffer goalBuffer;
     if (!boundaryHitBuffer.loadFromFile("sounds/boundary_Hit.wav") ||
-        !paddleHitBuffer.loadFromFile("sounds/paddle_Hit.wav")) {
+        !paddleHitBuffer.loadFromFile("sounds/paddle_Hit.wav") ||
+        !goalBuffer.loadFromFile("sounds/goal.wav")) {
         std::cerr << "Failed to load sound\n";
     }
 
     // sounds
     sf::Sound boundaryHit(boundaryHitBuffer);
     sf::Sound paddleHit(paddleHitBuffer);
+    sf::Sound goal(goalBuffer);
 
     // fonts
     sf::Font font("fonts/gameFont.ttf");
@@ -867,18 +887,72 @@ int main() {
     CountdownText.setOrigin(CountdownTextBounds.position + CountdownTextBounds.size / 2.f);
     CountdownText.setPosition({ windowSize.x / 2.f, windowSize.y * 0.4f });
 
+    // game end buttons background
+    sf::RectangleShape gameEndBG;
+    gameEndBG.setSize({ windowSize.x * 0.70f, windowSize.y * 0.30f });
+    gameEndBG.setFillColor(sf::Color(102, 178, 50));
+    gameEndBG.setPosition({ -100.f, -100.f });
+
+    sf::Text gameEndBGText(font, "", 24);
+    sf::FloatRect gameEndBGTextBounds = gameEndBGText.getLocalBounds();
+    gameEndBGText.setOrigin(gameEndBGTextBounds.position + gameEndBGTextBounds.size / 2.f);
+    sf::Vector2f gameEndBGCenter = gameEndBG.getPosition() + gameEndBG.getSize() / 2.f;
+    gameEndBGText.setPosition(gameEndBGCenter);
+
+    // Play again button
+    sf::RectangleShape playAgainButton;
+    playAgainButton.setSize({ windowSize.x * 0.20f, windowSize.y * 0.10f });
+    playAgainButton.setFillColor(sf::Color(117, 153, 105));
+    playAgainButton.setPosition({ -100.f, -100.f });
+
+    sf::Text playAgainText(font, "Play again", 24);
+    sf::FloatRect playAgainTextBounds = playAgainText.getLocalBounds();
+    playAgainText.setOrigin(playAgainTextBounds.position + playAgainTextBounds.size / 2.f);
+    sf::Vector2f playAgainButtonCenter = playAgainButton.getPosition() + playAgainButton.getSize() / 2.f;
+    playAgainText.setPosition(playAgainButtonCenter);
+
+    // Change mode button
+    sf::RectangleShape changeModeButton;
+    changeModeButton.setSize({ windowSize.x * 0.20f, windowSize.y * 0.10f });
+    changeModeButton.setFillColor(sf::Color(117, 153, 105));
+    changeModeButton.setPosition({ -100.f, -100.f });
+
+    sf::Text changeModeText(font, "Change mode", 24);
+    sf::FloatRect changeModeTextBounds = changeModeText.getLocalBounds();
+    changeModeText.setOrigin(changeModeTextBounds.position + changeModeTextBounds.size / 2.f);
+    sf::Vector2f changeModeButtonCenter = changeModeButton.getPosition() + changeModeButton.getSize() / 2.f;
+    changeModeText.setPosition(changeModeButtonCenter);
+
+    // quit button
+    sf::RectangleShape quitButton;
+    quitButton.setSize({ windowSize.x * 0.20f, windowSize.y * 0.10f });
+    quitButton.setFillColor(sf::Color(117, 153, 105));
+    quitButton.setPosition({ -100.f, -100.f });
+
+    sf::Text quitText(font, "Change mode", 24);
+    sf::FloatRect quitTextBounds = quitText.getLocalBounds();
+    quitText.setOrigin(quitTextBounds.position + quitTextBounds.size / 2.f);
+    sf::Vector2f quitButtonCenter = quitButton.getPosition() + quitButton.getSize() / 2.f;
+    quitText.setPosition(quitButtonCenter);
 
     // Clock
     sf::Clock clock;
 
-    while (window.isOpen()) {
+    // normalize vectors
+    upLeft = { upLeft.x * 0.015f, upLeft.y * 0.015f };
+    upRight = { upRight.x * 0.015f, upRight.y * 0.015f };
+    downLeft = { downLeft.x * 0.015f, downLeft.y * 0.015f };
+    downRight = { downRight.x * 0.015f, downRight.y * 0.015f };
+    current = { current.x * 0.015f, current.y * 0.015f };
 
-        
-        
+    while (window.isOpen()) {
 
         if (gameState == 2) {
             
             checkForCloseEvent(window);
+
+            float dt = clock.restart().asSeconds();
+            if (dt > 0.025f) dt = 0.025f;
 
             startCountdown(
                 goalScored,
@@ -906,7 +980,9 @@ int main() {
                 downLeft,
                 downRight,
                 current,
-                goalScored
+                goalScored,
+                dt,
+                goal
             );
 
             enemyScoreText.setString(std::to_string(enemyScore));
@@ -914,11 +990,12 @@ int main() {
 
             decreaseRandomnessFactor(randInt, evilRectangle, movementPattern, randomMovement);
 
-            detectUpwardMovement(rectangle, isMoving, speed);
+            detectUpwardMovement(rectangle, isMoving, speed, dt);
 
-            detectDownwardMovement(window, rectangle, isMoving, speed);
+            detectDownwardMovement(window, rectangle, isMoving, speed, dt);
 
-            ball.move(current);
+            //std::cout << "dt: " << dt << std::endl;
+            ball.move({ current.x, current.y });
 
             updateBallBounds(
                 bottomOfBall,
@@ -965,7 +1042,7 @@ int main() {
                 backOfRectangle,
                 rightSideOfBall,
                 isMoving,
-                speed,
+                speed * dt,
                 paddleHit
             );
 
@@ -994,7 +1071,7 @@ int main() {
                 downLeft,
                 backOfEvilRectangle,
                 leftSideOfBall,
-                speed,
+                speed * dt,
                 paddleHit
             );
 
@@ -1013,19 +1090,18 @@ int main() {
                 movementPattern,
                 evilRectangle,
                 isComplete,
-                speed,
+                speed * dt,
                 window,
                 upLeft,
                 downLeft,
                 swayRange,
                 originalY,
                 swayUp,
-                swaySpeed
+                swaySpeed * dt
             );
 
             // ball speeds up (exponential function, slow at first fast later on)
-            increaseBallSpeed(masterSpeed, current, upLeft, upRight, downLeft, downRight);
-
+            increaseBallSpeed(masterSpeed, current, upLeft, upRight, downLeft, downRight, dt);
 
             window.clear(sf::Color::Black);
 
@@ -1067,6 +1143,8 @@ int main() {
             window.draw(pvbText);
             window.draw(bvbButton);
             window.draw(bvbText);
+            //window.draw(playAgainButton);
+            //window.draw(playAgainText);
 
             window.display();
         }

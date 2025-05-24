@@ -44,4 +44,3 @@ add_custom_command(
 
 target_compile_features(main PRIVATE cxx_std_17)
 target_link_libraries(main PRIVATE SFML::Graphics SFML::Audio SFML::Network SFML::System SFML::Window)
-
